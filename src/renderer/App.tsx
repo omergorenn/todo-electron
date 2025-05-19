@@ -19,7 +19,8 @@ import {
   ListItemText,
   Paper,
   Collapse,
-  InputBase
+  InputBase,
+  Tooltip
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -31,16 +32,20 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import LabelIcon from '@mui/icons-material/Label';
 import CircleIcon from '@mui/icons-material/Circle';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import SortIcon from '@mui/icons-material/Sort';
+import NotesIcon from '@mui/icons-material/Notes';
 import { AnimatePresence, motion } from 'framer-motion';
-import AppTheme, { ColorModeContext } from './theme';
+import AppTheme, { ColorModeContext, ThemeToggle } from './theme';
 import useTodos from './hooks/useTodos';
 
 interface Todo {
   id: number;
   text: string;
+  description: string;
   done: boolean;
   priority: 'low' | 'medium' | 'high';
   section: string;
+  createdAt: number;
 }
 
 interface Section {
@@ -60,31 +65,79 @@ const PRIORITY_COLORS: Record<Todo['priority'], string> = {
   low: 'rgba(16, 185, 129, 0.7)'     // Softer green
 };
 
+// Theme-aware priority colors
+const getPriorityColor = (priority: Todo['priority'], isDark: boolean): string => {
+  const colors = {
+    high: {
+      light: 'rgba(239, 68, 68, 0.7)',
+      dark: 'rgba(248, 113, 113, 0.7)'
+    },
+    medium: {
+      light: 'rgba(245, 158, 11, 0.7)',
+      dark: 'rgba(251, 191, 36, 0.7)'
+    },
+    low: {
+      light: 'rgba(16, 185, 129, 0.7)',
+      dark: 'rgba(52, 211, 153, 0.7)'
+    }
+  };
+  
+  return colors[priority][isDark ? 'dark' : 'light'];
+};
+
 export default function App() {
   const colorMode = useContext(ColorModeContext);
-  const [todos, setTodos, sections, setSections] = useTodos() as [
-    Todo[],
-    React.Dispatch<React.SetStateAction<Todo[]>>,
-    Section[],
-    React.Dispatch<React.SetStateAction<Section[]>>
-  ];
+  const { 
+    todos, 
+    setTodos, 
+    sections, 
+    setSections, 
+    sortMethod, 
+    setSortMethod 
+  } = useTodos();
 
   // New‐task inputs
   const [newTask, setNewTask] = useState('');
+  const [newDescription, setNewDescription] = useState('');
   const [newPriority, setNewPriority] = useState<Todo['priority']>('medium');
   const [newSection, setNewSection] = useState<string>(sections[0]?.id || 'today');
-
+  
   // Drag state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   // Edit state
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
+  
+  // UI states
+  const [showDescription, setShowDescription] = useState<number | null>(null);
 
   // Add state for drag over section
   const [dragOverSection, setDragOverSection] = useState<string | null>(null);
+
+  // Description field ref
+  const descriptionFieldRef = React.useRef<HTMLDivElement>(null);
+
+  // Handle clicks outside description field
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (descriptionFieldRef.current && !descriptionFieldRef.current.contains(event.target as Node)) {
+        // Only close if clicking outside the new task area
+        const taskArea = document.querySelector('.new-task-area');
+        if (taskArea && !taskArea.contains(event.target as Node)) {
+          setNewDescription('');
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Add global event listener to reset drag state
   useEffect(() => {
@@ -185,17 +238,20 @@ export default function App() {
   const addTask = () => {
     const text = newTask.trim();
     if (!text) return;
-    setTodos(ts => [
-      ...ts,
-      { 
-        id: Date.now(), 
-        text, 
-        done: false, 
-        priority: newPriority,
-        section: newSection 
-      }
-    ]);
+    
+    const newTodo: Todo = {
+      id: Date.now(),
+      text,
+      description: newDescription.trim(),
+      done: false,
+      priority: newPriority,
+      section: newSection,
+      createdAt: Date.now()
+    };
+    
+    setTodos(ts => [...ts, newTodo]);
     setNewTask('');
+    setNewDescription('');
   };
 
   // Toggle done
@@ -219,6 +275,7 @@ export default function App() {
   const startEdit = (todo: Todo) => {
     setEditingId(todo.id);
     setEditText(todo.text);
+    setEditDescription(todo.description);
   };
 
   // Finish editing
@@ -226,10 +283,20 @@ export default function App() {
     if (editingId === null) return;
     const text = editText.trim();
     if (text) {
-      setTodos(ts => ts.map(t => t.id === editingId ? { ...t, text } : t));
+      setTodos(ts => ts.map(t => t.id === editingId ? { 
+        ...t, 
+        text,
+        description: editDescription.trim()
+      } : t));
     }
     setEditingId(null);
     setEditText('');
+    setEditDescription('');
+  };
+
+  // Toggle showing description
+  const toggleShowDescription = (id: number | null) => {
+    setShowDescription(showDescription === id ? null : id);
   };
 
   // Toggle section expanded/collapsed
@@ -274,18 +341,63 @@ export default function App() {
         {/* Header - Simplified */}
         <Box sx={{ p: 1.5, display: 'flex', gap: 1, alignItems: 'center' }}>
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 500, letterSpacing: '-0.01em' }}>Tasks</Typography>
-          <IconButton size="small" onClick={colorMode.toggle} sx={{ opacity: 0.6 }}>🌓</IconButton>
-          <IconButton size="small" onClick={() => window.electronAPI.hideWindow()} sx={{ opacity: 0.6 }}>
-            <MinimizeIcon fontSize="inherit"/>
-          </IconButton>
-          <IconButton size="small" onClick={() => window.electronAPI.closeWindow()} sx={{ opacity: 0.6 }}>
-            <CloseIcon fontSize="inherit"/>
-          </IconButton>
+          
+          {/* Sorting Dropdown */}
+          <Tooltip title="Sort Tasks">
+            <IconButton 
+              size="small" 
+              onClick={(e) => {
+                // Cycle through sort methods
+                if (sortMethod === 'none') setSortMethod('priority');
+                else if (sortMethod === 'priority') setSortMethod('createdAt');
+                else setSortMethod('none');
+              }}
+              sx={{ 
+                opacity: 0.6,
+                color: sortMethod !== 'none' ? 'primary.main' : 'inherit'
+              }}
+            >
+              <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <LabelIcon fontSize="small" />
+                {sortMethod !== 'none' && (
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      position: 'absolute', 
+                      fontSize: '8px', 
+                      bottom: -8, 
+                      width: '100%', 
+                      textAlign: 'center',
+                      opacity: 0.8
+                    }}
+                  >
+                    {sortMethod === 'priority' ? 'PRIO' : 'NEW'}
+                  </Typography>
+                )}
+              </Box>
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title="Toggle theme">
+            <Box>
+              <ThemeToggle />
+            </Box>
+          </Tooltip>
+          <Tooltip title="Minimize">
+            <IconButton size="small" onClick={() => window.electronAPI.hideWindow()} sx={{ opacity: 0.6 }}>
+              <MinimizeIcon fontSize="inherit"/>
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Close">
+            <IconButton size="small" onClick={() => window.electronAPI.closeWindow()} sx={{ opacity: 0.6 }}>
+              <CloseIcon fontSize="inherit"/>
+            </IconButton>
+          </Tooltip>
         </Box>
         <Divider />
 
         {/* Add New Task - Simplified */}
-        <Box sx={{ p: 1.5, pt: 2 }}>
+        <Box className="new-task-area" sx={{ p: 1.5, pt: 2 }}>
           <Box sx={{ display: 'flex', mb: 1, gap: 1 }}>
             <FormControl size="small" fullWidth>
               <Select
@@ -308,15 +420,15 @@ export default function App() {
                 sx={{ '& .MuiSelect-select': { py: 1, px: 1.5 } }}
               >
                 <MenuItem value="high">
-                  <CircleIcon sx={{ color: PRIORITY_COLORS.high, fontSize: 10, mr: 1 }} />
+                  <CircleIcon sx={{ color: getPriorityColor('high', colorMode.isDark), fontSize: 10, mr: 1 }} />
                   High
                 </MenuItem>
                 <MenuItem value="medium">
-                  <CircleIcon sx={{ color: PRIORITY_COLORS.medium, fontSize: 10, mr: 1 }} />
+                  <CircleIcon sx={{ color: getPriorityColor('medium', colorMode.isDark), fontSize: 10, mr: 1 }} />
                   Medium
                 </MenuItem>
                 <MenuItem value="low">
-                  <CircleIcon sx={{ color: PRIORITY_COLORS.low, fontSize: 10, mr: 1 }} />
+                  <CircleIcon sx={{ color: getPriorityColor('low', colorMode.isDark), fontSize: 10, mr: 1 }} />
                   Low
                 </MenuItem>
               </Select>
@@ -330,22 +442,86 @@ export default function App() {
               placeholder="Add a task..."
               value={newTask}
               onChange={e=>setNewTask(e.target.value)}
-              onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addTask();}}}
+              onKeyDown={e=>{if(e.key==='Enter' && !e.shiftKey){e.preventDefault();addTask();}}}
               sx={{ 
                 '& .MuiOutlinedInput-root': { 
                   borderRadius: 1,
-                  bgcolor: 'background.paper'
+                  bgcolor: 'background.paper',
+                  transition: 'all 0.3s'
+                },
+                '& .MuiOutlinedInput-root:hover': {
+                  boxShadow: colorMode.isDark ? '0 0 8px rgba(255,255,255,0.1)' : '0 0 8px rgba(0,0,0,0.1)'
                 }
               }}
               InputProps={{
                 endAdornment: (
-                  <IconButton onClick={addTask} size="small" sx={{ opacity: 0.7 }}>
-                    <AddIcon fontSize="inherit"/>
-                  </IconButton>
+                  <Tooltip title={newDescription ? "Hide description field" : "Add description"}>
+                    <IconButton 
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const shouldShow = !newDescription || newDescription.trim() === '';
+                        setNewDescription(shouldShow ? ' ' : '');
+                      }}
+                      size="small" 
+                      sx={{ 
+                        opacity: newDescription ? 0.9 : 0.4,
+                        transform: newDescription ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s'
+                      }}
+                    >
+                      <ExpandMoreIcon fontSize="inherit"/>
+                    </IconButton>
+                  </Tooltip>
                 )
               }}
             />
+            <IconButton onClick={addTask} sx={{ opacity: 0.7 }}>
+              <AddIcon />
+            </IconButton>
           </Box>
+          
+          {/* Description field */}
+          <Collapse in={!!newDescription}>
+            <Box 
+              ref={descriptionFieldRef}
+              sx={{ mt: 1, mb: 1 }}
+              onMouseDown={e => e.stopPropagation()}
+              onMouseUp={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
+              onDoubleClick={e => e.stopPropagation()}
+            >
+              <TextField
+                fullWidth
+                multiline
+                rows={2}
+                size="small"
+                placeholder="Add description (optional)..."
+                value={newDescription === ' ' ? '' : newDescription}
+                onChange={e => setNewDescription(e.target.value)}
+                onKeyDown={e => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    addTask();
+                  }
+                }}
+                onFocus={e => e.stopPropagation()}
+                onBlur={e => e.stopPropagation()}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 1,
+                    bgcolor: 'background.paper',
+                    fontSize: '0.85rem',
+                    transition: 'all 0.3s'
+                  },
+                  '& .MuiOutlinedInput-root:hover': {
+                    boxShadow: colorMode.isDark ? '0 0 8px rgba(255,255,255,0.1)' : '0 0 8px rgba(0,0,0,0.1)'
+                  }
+                }}
+              />
+            </Box>
+          </Collapse>
         </Box>
 
         {/* Sections List - Simplified */}
@@ -362,7 +538,9 @@ export default function App() {
                   mb: 1.5,
                   borderRadius: 1,
                   overflow: 'hidden',
-                  bgcolor: 'background.paper'
+                  bgcolor: 'background.paper',
+                  transition: 'all 0.3s ease',
+                  boxShadow: colorMode.isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.05)'
                 }}
               >
                 {/* Section Header - Simplified */}
@@ -443,8 +621,9 @@ export default function App() {
                           <ListItem
                             disablePadding
                             sx={{
-                              borderLeft: `3px solid ${PRIORITY_COLORS[todo.priority]}`,
-                              pl: 0.5
+                              borderLeft: `3px solid ${getPriorityColor(todo.priority, colorMode.isDark)}`,
+                              pl: 0.5,
+                              transition: 'all 0.2s ease'
                             }}
                           >
                             <ListItemButton
@@ -464,27 +643,97 @@ export default function App() {
                               />
 
                               {editingId===todo.id ? (
-                                <TextField
-                                  value={editText}
-                                  size="small"
-                                  fullWidth
-                                  autoFocus
-                                  onChange={e=>setEditText(e.target.value)}
-                                  onBlur={finishEdit}
-                                  onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();finishEdit();}}}
-                                />
+                                <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                                  <TextField
+                                    value={editText}
+                                    size="small"
+                                    fullWidth
+                                    autoFocus
+                                    onChange={e=>setEditText(e.target.value)}
+                                    onKeyDown={e=>{if(e.key==='Enter' && !e.shiftKey){e.preventDefault();finishEdit();}}}
+                                  />
+                                  <TextField
+                                    value={editDescription}
+                                    size="small"
+                                    fullWidth
+                                    multiline
+                                    rows={2}
+                                    placeholder="Description (optional)"
+                                    onChange={e=>setEditDescription(e.target.value)}
+                                    sx={{ mt: 1, fontSize: '0.85rem' }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        finishEdit();
+                                      }
+                                    }}
+                                  />
+                                </Box>
                               ) : (
-                                <ListItemText
-                                  primary={todo.text}
-                                  primaryTypographyProps={{ 
-                                    variant: 'body2', 
-                                    style: { 
-                                      textDecoration: todo.done ? 'line-through' : 'none',
-                                      fontWeight: 400
-                                    }
-                                  }}
-                                  sx={{ m: 0 }}
-                                />
+                                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                  <ListItemText
+                                    primary={todo.text}
+                                    primaryTypographyProps={{ 
+                                      variant: 'body2', 
+                                      style: { 
+                                        textDecoration: todo.done ? 'line-through' : 'none',
+                                        fontWeight: 400
+                                      }
+                                    }}
+                                    sx={{ m: 0 }}
+                                  />
+                                  
+                                  {/* Description toggle & display */}
+                                  {todo.description && (
+                                    <>
+                                      <Box 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleShowDescription(todo.id);
+                                        }}
+                                        sx={{ 
+                                          display: 'flex', 
+                                          alignItems: 'center',
+                                          mt: 0.5,
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        <Typography 
+                                          variant="caption" 
+                                          sx={{ 
+                                            color: 'text.secondary',
+                                            fontSize: '0.7rem',
+                                            mr: 0.5
+                                          }}
+                                        >
+                                          Notes
+                                        </Typography>
+                                        {showDescription === todo.id ? (
+                                          <ExpandLessIcon sx={{ fontSize: 12, opacity: 0.7 }} />
+                                        ) : (
+                                          <ExpandMoreIcon sx={{ fontSize: 12, opacity: 0.7 }} />
+                                        )}
+                                      </Box>
+                                      
+                                      <Collapse in={showDescription === todo.id}>
+                                        <Typography
+                                          variant="body2"
+                                          sx={{
+                                            fontSize: '0.75rem',
+                                            color: 'text.secondary',
+                                            py: 0.5,
+                                            px: 1,
+                                            mt: 0.5,
+                                            borderRadius: 1,
+                                            backgroundColor: colorMode.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                                          }}
+                                        >
+                                          {todo.description}
+                                        </Typography>
+                                      </Collapse>
+                                    </>
+                                  )}
+                                </Box>
                               )}
                               
                               <IconButton 
