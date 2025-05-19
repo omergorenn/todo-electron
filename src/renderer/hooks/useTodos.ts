@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid';
 import { useEffect, useState, useCallback } from 'react';
 
 interface Todo {
@@ -73,7 +74,17 @@ const useTodos = () => {
             description: todo.description || '',
             createdAt: todo.createdAt || Date.now()
           })));
-          setSections(data.sections || DEFAULT_SECTIONS);
+
+          // If sections exist in data, use them, otherwise use defaults
+          if (data.sections && Array.isArray(data.sections)) {
+            // Ensure all sections have the expanded property
+            setSections(data.sections.map(section => ({
+              ...section,
+              expanded: typeof section.expanded === 'boolean' ? section.expanded : true
+            })));
+          } else {
+            setSections(DEFAULT_SECTIONS);
+          }
         }
         setInitialized(true);
       })
@@ -117,13 +128,43 @@ const useTodos = () => {
   }, [sortMethod]);
 
   // Return sorted todos and other values
+  // Section management functions
+  const addSection = (name: string) => {
+    setSections(prev => [...prev, { id: nanoid(), name, expanded: true }]);
+  };
+  const renameSection = (id: string, name: string) => {
+    setSections(prev => prev.map(s => s.id === id ? { ...s, name } : s));
+  };
+  const deleteSection = (id: string) => {
+    setSections(prev => prev.filter(s => s.id !== id));
+    setTodos(prev =>
+      prev.map(todo =>
+        todo.section === id
+          ? { ...todo, section: DEFAULT_SECTIONS[0].id }
+          : todo
+      )
+    );
+  };
+  const reorderSections = (from: number, to: number) => {
+    setSections(prev => {
+      const arr = [...prev];
+      const [m] = arr.splice(from, 1);
+      arr.splice(to, 0, m);
+      return arr;
+    });
+  };
+
   return {
     todos: getSortedTodos(todos), 
     setTodos, 
     sections, 
     setSections,
     sortMethod,
-    setSortMethod
+    setSortMethod,
+    addSection,
+    renameSection,
+    deleteSection,
+    reorderSections
   };
 };
 

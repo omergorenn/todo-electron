@@ -20,7 +20,13 @@ import {
   Paper,
   Collapse,
   InputBase,
-  Tooltip
+  Tooltip,
+  Menu,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -34,6 +40,10 @@ import CircleIcon from '@mui/icons-material/Circle';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SortIcon from '@mui/icons-material/Sort';
 import NotesIcon from '@mui/icons-material/Notes';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import EditIcon from '@mui/icons-material/Edit';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { AnimatePresence, motion } from 'framer-motion';
 import AppTheme, { ColorModeContext, ThemeToggle } from './theme';
 import useTodos from './hooks/useTodos';
@@ -120,6 +130,12 @@ export default function App() {
 
   // Description field ref
   const descriptionFieldRef = React.useRef<HTMLDivElement>(null);
+
+  // Section management state
+  const [sectionMenuAnchor, setSectionMenuAnchor] = useState<null | HTMLElement>(null);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [isRenamingSectionId, setIsRenamingSectionId] = useState<string | null>(null);
+  const [showAddSectionDialog, setShowAddSectionDialog] = useState(false);
 
   // Handle clicks outside description field
   useEffect(() => {
@@ -306,13 +322,64 @@ export default function App() {
     ));
   };
 
-  // Add new section
-  const addSection = () => {
+  // Handle section menu
+  const handleSectionMenuOpen = (event: React.MouseEvent<HTMLElement>, sectionId: string) => {
+    event.stopPropagation();
+    setActiveSectionId(sectionId);
+    setSectionMenuAnchor(event.currentTarget);
+  };
+
+  const handleSectionMenuClose = () => {
+    setSectionMenuAnchor(null);
+    setActiveSectionId(null);
+  };
+
+  // Section operations
+  const startRenamingSection = () => {
+    const section = sections.find(s => s.id === activeSectionId);
+    if (section) {
+      setNewSectionName(section.name);
+      setIsRenamingSectionId(activeSectionId);
+    }
+    handleSectionMenuClose();
+  };
+
+  const finishRenamingSection = () => {
+    if (!newSectionName.trim() || !isRenamingSectionId) return;
+    
+    setSections(sections.map(s => 
+      s.id === isRenamingSectionId 
+        ? { ...s, name: newSectionName.trim() }
+        : s
+    ));
+    
+    setIsRenamingSectionId(null);
+    setNewSectionName('');
+  };
+
+  const moveSection = (sectionId: string, direction: 'up' | 'down') => {
+    setSections(prevSections => {
+      const index = prevSections.findIndex(s => s.id === sectionId);
+      if (index === -1) return prevSections;
+      
+      const newSections = [...prevSections];
+      const newIndex = direction === 'up' ? index - 1 : index + 1;
+      
+      if (newIndex < 0 || newIndex >= newSections.length) return prevSections;
+      
+      // Swap sections
+      [newSections[index], newSections[newIndex]] = [newSections[newIndex], newSections[index]];
+      return newSections;
+    });
+    handleSectionMenuClose();
+  };
+
+  // Add new section dialog
+  const handleAddSection = () => {
     if (!newSectionName.trim()) return;
     
     const newId = newSectionName.toLowerCase().replace(/\s+/g, '-');
     
-    // Check if this section ID already exists
     if (sections.some(s => s.id === newId)) {
       alert('A section with a similar name already exists.');
       return;
@@ -324,7 +391,7 @@ export default function App() {
     ]);
     
     setNewSectionName('');
-    setIsAddingSection(false);
+    setShowAddSectionDialog(false);
   };
 
   // Delete section and all its todos
@@ -338,9 +405,19 @@ export default function App() {
   return (
     <AppTheme>
       <Drawer variant="persistent" anchor="right" open PaperProps={{ sx: { width: 280, boxShadow: 'none', borderLeft: '1px solid rgba(0,0,0,0.1)' } }}>
-        {/* Header - Simplified */}
+        {/* Header with Add Section Button */}
         <Box sx={{ p: 1.5, display: 'flex', gap: 1, alignItems: 'center' }}>
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 500, letterSpacing: '-0.01em' }}>Tasks</Typography>
+          
+          <Tooltip title="Add new section">
+            <IconButton 
+              size="small" 
+              onClick={() => setShowAddSectionDialog(true)}
+              sx={{ opacity: 0.6 }}
+            >
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
           
           {/* Sorting Dropdown */}
           <Tooltip title="Sort Tasks">
@@ -455,23 +532,30 @@ export default function App() {
               }}
               InputProps={{
                 endAdornment: (
-                  <Tooltip title={newDescription ? "Hide description field" : "Add description"}>
-                    <IconButton 
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const shouldShow = !newDescription || newDescription.trim() === '';
-                        setNewDescription(shouldShow ? ' ' : '');
-                      }}
-                      size="small" 
-                      sx={{ 
-                        opacity: newDescription ? 0.9 : 0.4,
-                        transform: newDescription ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s'
-                      }}
-                    >
-                      <ExpandMoreIcon fontSize="inherit"/>
-                    </IconButton>
+                  <Tooltip title={newDescription && newDescription.trim() !== '' && newDescription !== ' ' ? "Hide description" : "Add description"}>
+                    <div>
+                      <IconButton 
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // If there's actual content, keep it open
+                          if (newDescription && newDescription.trim() !== '' && newDescription !== ' ') {
+                            setNewDescription('');  // Clear and close
+                          } else {
+                            // If empty or just placeholder space, toggle
+                            setNewDescription(newDescription ? '' : ' ');
+                          }
+                        }}
+                        size="small" 
+                        sx={{ 
+                          opacity: newDescription && newDescription.trim() !== '' && newDescription !== ' ' ? 0.9 : 0.4,
+                          transform: newDescription ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s'
+                        }}
+                      >
+                        <ExpandMoreIcon fontSize="inherit"/>
+                      </IconButton>
+                    </div>
                   </Tooltip>
                 )
               }}
@@ -507,12 +591,18 @@ export default function App() {
                   }
                 }}
                 onFocus={e => e.stopPropagation()}
-                onBlur={e => e.stopPropagation()}
+                onBlur={e => {
+                  e.stopPropagation();
+                  // If description is empty or just whitespace, close it
+                  if (!newDescription || newDescription.trim() === '' || newDescription === ' ') {
+                    setNewDescription('');
+                  }
+                }}
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 1,
                     bgcolor: 'background.paper',
-                    fontSize: '0.85rem',
+                    fontSize: '0.8rem',
                     transition: 'all 0.3s'
                   },
                   '& .MuiOutlinedInput-root:hover': {
@@ -524,7 +614,7 @@ export default function App() {
           </Collapse>
         </Box>
 
-        {/* Sections List - Simplified */}
+        {/* Sections List with Management */}
         <Box sx={{ overflow: 'auto', flexGrow: 1, px: 1.5, pt: 1 }}>
           {sections.map(section => {
             const sectionTodos = todos.filter(todo => todo.section === section.id);
@@ -543,7 +633,7 @@ export default function App() {
                   boxShadow: colorMode.isDark ? '0 2px 8px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.05)'
                 }}
               >
-                {/* Section Header - Simplified */}
+                {/* Section Header with Management */}
                 <Box 
                   sx={{ 
                     py: 1,
@@ -567,34 +657,64 @@ export default function App() {
                   ) : (
                     <ExpandMoreIcon fontSize="small" sx={{ opacity: 0.5, fontSize: 18 }} />
                   )}
-                  <Typography variant="subtitle2" sx={{ ml: 1, flexGrow: 1, fontWeight: 500, letterSpacing: '-0.01em' }}>
-                    {section.name} 
-                    <Box 
-                      component="span" 
-                      sx={{ 
-                        ml: 1,
-                        backgroundColor: activeTodos.length ? 'primary.main' : 'text.disabled',
-                        color: 'white',
-                        borderRadius: '10px',
-                        padding: '1px 6px',
-                        fontSize: '0.7rem',
-                        display: 'inline-block',
-                        transition: 'all 0.2s'
+                  
+                  {isRenamingSectionId === section.id ? (
+                    <TextField
+                      size="small"
+                      value={newSectionName}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewSectionName(e.target.value)}
+                      onKeyDown={(e: React.KeyboardEvent) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          finishRenamingSection();
+                        }
                       }}
-                    >
-                      {activeTodos.length}
-                    </Box>
-                    {dragOverSection === section.id && draggedIndex !== null && (
-                      <Box component="span" sx={{ 
-                        ml: 1, 
-                        fontSize: '0.75rem', 
-                        color: 'primary.main',
-                        fontWeight: 500 
-                      }}>
-                        Drop here
-                      </Box>
-                    )}
-                  </Typography>
+                      onBlur={finishRenamingSection}
+                      autoFocus
+                      sx={{ 
+                        marginLeft: 1, 
+                        flexGrow: 1,
+                        '& .MuiInputBase-input': {
+                          fontSize: '0.875rem',
+                          paddingY: 0.5
+                        }
+                      }}
+                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <>
+                      <Typography variant="subtitle2" sx={{ ml: 1, flexGrow: 1, fontWeight: 500, letterSpacing: '-0.01em' }}>
+                        {section.name}
+                        <Box 
+                          component="span" 
+                          sx={{ 
+                            ml: 1,
+                            backgroundColor: activeTodos.length ? 'primary.main' : 'text.disabled',
+                            color: 'white',
+                            borderRadius: '10px',
+                            padding: '1px 6px',
+                            fontSize: '0.7rem',
+                            display: 'inline-block',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {activeTodos.length}
+                        </Box>
+                      </Typography>
+                      
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleSectionMenuOpen(e, section.id)}
+                        sx={{ 
+                          opacity: 0.4,
+                          '&:hover': { opacity: 0.7 },
+                          ml: 1
+                        }}
+                      >
+                        <MoreVertIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    </>
+                  )}
                 </Box>
                 
                 {/* Section Todos - Simplified */}
@@ -660,7 +780,12 @@ export default function App() {
                                     rows={2}
                                     placeholder="Description (optional)"
                                     onChange={e=>setEditDescription(e.target.value)}
-                                    sx={{ mt: 1, fontSize: '0.85rem' }}
+                                    sx={{ 
+                                      mt: 1, 
+                                      '& .MuiInputBase-input': {
+                                        fontSize: '0.8rem'
+                                      }
+                                    }}
                                     onKeyDown={e => {
                                       if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
@@ -870,6 +995,96 @@ export default function App() {
             );
           })}
         </Box>
+
+        {/* Section Menu */}
+        <Menu
+          anchorEl={sectionMenuAnchor}
+          open={Boolean(sectionMenuAnchor)}
+          onClose={handleSectionMenuClose}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MenuItem onClick={startRenamingSection}>
+            <ListItemIcon>
+              <EditIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Rename</ListItemText>
+          </MenuItem>
+          <MenuItem 
+            onClick={() => moveSection(activeSectionId!, 'up')}
+            disabled={sections.findIndex(s => s.id === activeSectionId) === 0}
+          >
+            <ListItemIcon>
+              <ArrowUpwardIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Move Up</ListItemText>
+          </MenuItem>
+          <MenuItem 
+            onClick={() => moveSection(activeSectionId!, 'down')}
+            disabled={sections.findIndex(s => s.id === activeSectionId) === sections.length - 1}
+          >
+            <ListItemIcon>
+              <ArrowDownwardIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Move Down</ListItemText>
+          </MenuItem>
+          <MenuItem 
+            onClick={() => {
+              handleSectionMenuClose();
+              deleteSection(activeSectionId!);
+            }}
+            sx={{ color: 'error.main' }}
+          >
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" color="error" />
+            </ListItemIcon>
+            <ListItemText>Delete</ListItemText>
+          </MenuItem>
+        </Menu>
+
+        {/* Add Section Dialog */}
+        <Dialog 
+          open={showAddSectionDialog} 
+          onClose={() => {
+            setShowAddSectionDialog(false);
+            setNewSectionName('');
+          }}
+        >
+          <DialogTitle>Add New Section</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Section Name"
+              fullWidth
+              value={newSectionName}
+              onChange={(e) => setNewSectionName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAddSection();
+                }
+              }}
+              sx={{
+                '& .MuiInputBase-input': {
+                  fontSize: '0.875rem'
+                },
+                '& .MuiInputLabel-root': {
+                  fontSize: '0.875rem'
+                }
+              }}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => {
+              setShowAddSectionDialog(false);
+              setNewSectionName('');
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddSection} variant="contained" disabled={!newSectionName.trim()}>
+              Add
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Drawer>
     </AppTheme>
   );
