@@ -7,4 +7,5 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     saveTodos: (data) => electron_1.ipcRenderer.invoke('saveTodos', data),
     hideWindow: () => electron_1.ipcRenderer.invoke('hide-window'),
     closeWindow: () => electron_1.ipcRenderer.invoke('close-window'),
+    forceQuit: () => electron_1.ipcRenderer.invoke('force-quit'),
 });

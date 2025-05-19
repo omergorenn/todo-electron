@@ -2,12 +2,21 @@
   "appId": "com.omergorenn.todoelectron",
   "productName": "Todo App",
   "directories": {
-    "output": "release"
+    "output": "release",
+    "buildResources": "resources"
   },
   "files": [
     "dist/**/*",
     "resources/**/*",
-    "data/**/*"
+    "data/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "dist/renderer",
+      "to": "renderer",
+      "filter": ["**/*"]
+    }
   ],
   "mac": {
     "category": "public.app-category.productivity",

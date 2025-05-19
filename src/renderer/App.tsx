@@ -509,24 +509,44 @@ export default function App() {
                       </Box>
                     )}
                     
-                    {/* Show message when there are no active tasks but there are completed ones */}
-                    {activeTodos.length === 0 && completedTodos.length > 0 && (
-                      <Box sx={{ p:1.5, textAlign:'center', color:'text.disabled' }}>
-                        <Typography variant="body2" sx={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
-                          All tasks completed
-                        </Typography>
-                      </Box>
-                    )}
-                    
-                    {/* Completed Tasks Section - Simplified */}
+                    {/* Completed Tasks Section with conditional header */}
                     {completedTodos.length > 0 && (
-                      <Box sx={{ borderTop: '1px dashed rgba(0,0,0,0.08)', mt: 1, pt: 0.5, pb: 0.5 }}>
-                        <Typography 
-                          variant="caption" 
-                          sx={{ px: 2, py: 0.5, color: 'text.disabled', display: 'block', fontSize: '0.7rem' }}
-                        >
-                          Completed ({completedTodos.length})
-                        </Typography>
+                      <Box sx={{ 
+                        borderTop: activeTodos.length > 0 ? '1px dashed rgba(0,0,0,0.08)' : 'none', 
+                        mt: activeTodos.length > 0 ? 1 : 0, 
+                        pt: 0.5, 
+                        pb: 0.5 
+                      }}>
+                        {/* Show "All tasks completed" only when no active tasks */}
+                        {activeTodos.length === 0 ? (
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              textAlign: 'center',
+                              px: 2, 
+                              py: 0.5, 
+                              color: 'text.disabled', 
+                              display: 'block', 
+                              fontSize: '0.8rem',
+                              fontStyle: 'italic'
+                            }}
+                          >
+                            All tasks completed
+                          </Typography>
+                        ) : (
+                          <Typography 
+                            variant="caption" 
+                            sx={{ 
+                              px: 2, 
+                              py: 0.5, 
+                              color: 'text.disabled', 
+                              display: 'block', 
+                              fontSize: '0.7rem' 
+                            }}
+                          >
+                            Completed ({completedTodos.length})
+                          </Typography>
+                        )}
                         
                         {completedTodos.map((todo) => (
                           <div

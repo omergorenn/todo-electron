@@ -185,8 +185,45 @@ function createWindow() {
       });
     });
   } else {
-    win.loadFile(path.join(__dirname, '../renderer/index.html')).catch(error => {
+    // Improved path resolution for production
+    const rendererPath = path.join(__dirname, '..', 'renderer', 'index.html');
+    console.log('Loading renderer from:', rendererPath);
+    
+    win.loadFile(rendererPath).catch(error => {
       console.error('Failed to load HTML file:', error);
+      
+      // Fallback paths - try alternative locations
+      const alternatives = [
+        path.join(__dirname, '../renderer/index.html'),
+        path.join(app.getAppPath(), 'dist/renderer/index.html'),
+        path.join(process.resourcesPath, 'dist/renderer/index.html')
+      ];
+      
+      console.log('Trying alternative paths:', alternatives);
+      
+      // Try each alternative path
+      const tryLoadAlternative = (paths: string[], index = 0) => {
+        if (index >= paths.length) {
+          console.error('All loading attempts failed');
+          return;
+        }
+        
+        const currentPath = paths[index];
+        console.log(`Trying path (${index+1}/${paths.length}):`, currentPath);
+        
+        if (fs.existsSync(currentPath)) {
+          console.log('File exists, attempting to load:', currentPath);
+          win.loadFile(currentPath).catch(err => {
+            console.error(`Failed to load alternative path ${index+1}:`, err);
+            tryLoadAlternative(paths, index + 1);
+          });
+        } else {
+          console.log('File does not exist:', currentPath);
+          tryLoadAlternative(paths, index + 1);
+        }
+      };
+      
+      tryLoadAlternative(alternatives);
     });
   }
 
@@ -322,7 +359,47 @@ function createTray() {
     { type: 'separator' },
     {
       label: 'Quit',
-      click: () => app.quit()
+      click: () => {
+        // Force quit the app completely
+        try {
+          console.log('Quit menu item clicked');
+          
+          // First clean up any references
+          if (mainWindow) {
+            console.log('Destroying main window');
+            if (!mainWindow.isDestroyed()) {
+              mainWindow.removeAllListeners(); // Remove all listeners first
+              mainWindow.hide();
+              mainWindow.destroy();
+            }
+            mainWindow = null;
+          }
+          
+          // Clear all active animations
+          console.log('Clearing all animations');
+          activeAnimations.forEach(interval => clearInterval(interval));
+          activeAnimations = [];
+          
+          // Unregister shortcuts
+          console.log('Unregistering global shortcuts');
+          globalShortcut.unregisterAll();
+          
+          // Clean up tray
+          if (tray) {
+            console.log('Destroying tray');
+            tray.destroy();
+            tray = null;
+          }
+          
+          // Just use process.exit directly - most reliable way to quit
+          console.log('Force exiting application');
+          process.exit(0);
+        } catch (error) {
+          console.error('Error during quit:', error);
+          // If anything fails, force exit
+          process.exit(0);
+        }
+      }
     }
   ]);
   
@@ -368,11 +445,21 @@ app.whenReady().then(() => {
     }
   });
   console.log('Command+` registered:', registered);
+  
+  // Register standard quit shortcut (Cmd+Q on macOS, Ctrl+Q elsewhere)
+  const quitKey = process.platform === 'darwin' ? 'Command+Q' : 'Control+Q';
+  const quitRegistered = globalShortcut.register(quitKey, () => {
+    console.log('Quit shortcut pressed');
+    process.exit(0);  // Force quit the app
+  });
+  console.log(`${quitKey} registered:`, quitRegistered);
 });
 
-// Quit when all windows are closed (except on macOS)
+// Allow closing on Windows/Linux
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
 });
 
 // Handle macOS activations
@@ -381,20 +468,45 @@ app.on('activate', () => {
 });
 
 // Clean up
-app.on('will-quit', () => {
-  // Clear all active animations
-  activeAnimations.forEach(interval => clearInterval(interval));
-  activeAnimations = [];
-  
-  // Unregister all shortcuts
-  globalShortcut.unregisterAll();
-  
-  // Clean up tray to prevent memory leak
-  if (tray) {
-    tray.destroy();
-    tray = null;
+app.on('will-quit', (event) => {
+  console.log('will-quit event fired');
+  try {
+    // Clear all active animations
+    activeAnimations.forEach(interval => clearInterval(interval));
+    activeAnimations = [];
+    
+    // Unregister all shortcuts
+    globalShortcut.unregisterAll();
+    
+    // Clean up tray to prevent memory leak
+    if (tray) {
+      tray.destroy();
+      tray = null;
+    }
+    
+    // Ensure the window is destroyed
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.removeAllListeners();
+      mainWindow.destroy();
+    }
+    
+    // Reset main window reference
+    mainWindow = null;
+    
+    console.log('Cleanup complete. Proceeding with quit.');
+  } catch (error) {
+    console.error('Error during cleanup:', error);
   }
-  
-  // Reset main window reference
-  mainWindow = null;
+});
+
+// Ensure we can force quit if needed
+app.on('before-quit', (event) => {
+  console.log('Before quit event fired');
+  // Allow natural quit to proceed
+});
+
+// Add a special IPC handler for quitting
+ipcMain.handle('force-quit', () => {
+  console.log('Force quit requested via IPC');
+  process.exit(0);
 });
