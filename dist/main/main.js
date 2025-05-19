@@ -21,19 +21,69 @@ const todoFilePath = path_1.default.join(__dirname, '../../../data/todos.json');
 // — IPC Handlers — 
 electron_1.ipcMain.handle('getTodos', async () => {
     try {
-        const raw = fs_1.default.readFileSync(todoFilePath, 'utf-8');
-        return JSON.parse(raw);
+        // Create data directory if it doesn't exist
+        const dataDir = path_1.default.dirname(todoFilePath);
+        if (!fs_1.default.existsSync(dataDir)) {
+            fs_1.default.mkdirSync(dataDir, { recursive: true });
+        }
+        // If file exists, read and parse it
+        if (fs_1.default.existsSync(todoFilePath)) {
+            const raw = fs_1.default.readFileSync(todoFilePath, 'utf-8');
+            const data = JSON.parse(raw);
+            // Handle old format (array of todos)
+            if (Array.isArray(data)) {
+                return {
+                    todos: data,
+                    sections: [
+                        { id: 'today', name: 'Today', expanded: true },
+                        { id: 'later', name: 'Later', expanded: true }
+                    ]
+                };
+            }
+            // Return new format (object with todos and sections)
+            return data;
+        }
+        else {
+            // Return empty data structure if file doesn't exist
+            return {
+                todos: [],
+                sections: [
+                    { id: 'today', name: 'Today', expanded: true },
+                    { id: 'later', name: 'Later', expanded: true }
+                ]
+            };
+        }
     }
-    catch {
-        return [];
+    catch (error) {
+        console.error('Error reading todos:', error);
+        return {
+            todos: [],
+            sections: [
+                { id: 'today', name: 'Today', expanded: true },
+                { id: 'later', name: 'Later', expanded: true }
+            ]
+        };
     }
 });
-electron_1.ipcMain.handle('saveTodos', async (_e, todos) => {
+electron_1.ipcMain.handle('saveTodos', async (_e, data) => {
     try {
-        fs_1.default.writeFileSync(todoFilePath, JSON.stringify(todos, null, 2));
+        // Create data directory if it doesn't exist
+        const dataDir = path_1.default.dirname(todoFilePath);
+        if (!fs_1.default.existsSync(dataDir)) {
+            fs_1.default.mkdirSync(dataDir, { recursive: true });
+        }
+        // Handle old format (just array of todos)
+        if (Array.isArray(data)) {
+            fs_1.default.writeFileSync(todoFilePath, JSON.stringify({ todos: data, sections: [] }, null, 2));
+        }
+        else {
+            // Write new format (object with todos and sections)
+            fs_1.default.writeFileSync(todoFilePath, JSON.stringify(data, null, 2));
+        }
         return { success: true };
     }
-    catch {
+    catch (error) {
+        console.error('Error saving todos:', error);
         return { success: false };
     }
 });
@@ -239,6 +289,13 @@ function createTray() {
                         mainWindow.hide();
                     }
                 });
+            }
+        },
+        { type: 'separator' },
+        {
+            label: 'View on GitHub',
+            click: () => {
+                require('electron').shell.openExternal('https://github.com/omergorenn/todo-electron');
             }
         },
         { type: 'separator' },

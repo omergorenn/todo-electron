@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   getTodos: () => ipcRenderer.invoke('getTodos'),
-  saveTodos: (todos: any[]) => ipcRenderer.invoke('saveTodos', todos),
+  saveTodos: (data: any) => ipcRenderer.invoke('saveTodos', data),
   hideWindow: () => ipcRenderer.invoke('hide-window'),
   closeWindow: () => ipcRenderer.invoke('close-window'),
 });

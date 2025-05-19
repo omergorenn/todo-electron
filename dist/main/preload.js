@@ -4,7 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     getTodos: () => electron_1.ipcRenderer.invoke('getTodos'),
-    saveTodos: (todos) => electron_1.ipcRenderer.invoke('saveTodos', todos),
+    saveTodos: (data) => electron_1.ipcRenderer.invoke('saveTodos', data),
     hideWindow: () => electron_1.ipcRenderer.invoke('hide-window'),
     closeWindow: () => electron_1.ipcRenderer.invoke('close-window'),
 });
