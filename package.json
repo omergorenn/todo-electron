@@ -8,8 +8,9 @@
   "keywords": [],
   "scripts": {
     "dev": "cross-env NODE_ENV=development concurrently \"vite\" \"tsc --project tsconfig.main.json --watch\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "vite build && tsc --project tsconfig.main.json",
-    "start": "electron ."
+    "build": "vite build && tsc --project tsconfig.main.json && node resources/generate-icons.js",
+    "start": "electron .",
+    "postinstall": "node resources/generate-icons.js"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
