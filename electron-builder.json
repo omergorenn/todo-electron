@@ -1,0 +1,32 @@
+{
+  "appId": "com.omergorenn.todoelectron",
+  "productName": "Todo App",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "resources/**/*",
+    "data/**/*"
+  ],
+  "mac": {
+    "category": "public.app-category.productivity",
+    "target": ["dmg", "zip"],
+    "icon": "resources/icon.icns",
+    "identity": null,
+    "hardenedRuntime": false
+  },
+  "win": {
+    "target": ["nsis"],
+    "icon": "resources/icon.ico"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "category": "Utility"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "omergorenn",
+    "repo": "todo-electron"
+  }
+}
